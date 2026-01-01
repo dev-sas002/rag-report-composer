@@ -15,11 +15,13 @@ from src.observability.cost_tracker import get_cost_tracker
 from src.observability.logger import get_logger, setup_logging
 from src.retrieval.vector_store import VectorStore
 
+# Questions the sample corpus in data/raw_data/ (Northwind Analytics) can
+# answer, so each report can be checked against the source files by hand.
 EXAMPLE_QUERIES = [
-    "What are ACME Corporation's Q4 2024 revenue figures and key metrics?",
-    "Summarize customer satisfaction and retention metrics",
-    "What products does ACME offer and what are their key features?",
-    "What are the company's future strategic initiatives?",
+    "How much did revenue grow and which segment drove it?",
+    "What happened to gross margin and why?",
+    "What is the current Net Promoter Score?",
+    "Which modules does the platform provide?",
 ]
 
 

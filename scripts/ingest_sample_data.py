@@ -76,9 +76,9 @@ def main():
 
         print("\n✅ Sample data ingestion complete!")
         print("\nYou can now run queries like:")
-        print('  python main.py --query "What are the company\'s revenue trends?"')
-        print('  python main.py --query "Summarize customer satisfaction metrics"')
-        print('  python main.py --query "What products does ACME offer?"')
+        print('  python main.py --query "How much did revenue grow and which segment drove it?"')
+        print('  python main.py --query "What do customers complain about most?"')
+        print('  python main.py --query "Which modules does the platform provide?"')
 
     except Exception as e:
         logger.error("sample_data_ingestion_failed", error=str(e))
