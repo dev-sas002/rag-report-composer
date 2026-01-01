@@ -15,7 +15,7 @@ Now a backend is a name and a factory:
     from src.providers import register_llm
 
     def make_ollama(settings):
-        from langchain_community.chat_models import ChatOllama
+        from langchain_ollama import ChatOllama
         return ChatOllama(model="llama3")
 
     register_llm("ollama", make_ollama)

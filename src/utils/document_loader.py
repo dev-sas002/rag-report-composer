@@ -1,11 +1,15 @@
 """
 Document loader for the file formats the pipeline can index: PDF, DOCX, TXT, MD.
+
+Each format is a few lines over the library that actually parses it (pypdf,
+python-docx, the standard library). These replaced LangChain's community
+loaders when `langchain-community` was sunset; the package was only ever
+providing those three thin wrappers and a directory walker.
 """
 
 from pathlib import Path
 from typing import List
 
-from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader, TextLoader
 from langchain_core.documents import Document
 
 from ..observability.logger import get_logger
@@ -34,6 +38,36 @@ def label_sources(documents: List[Document]) -> List[Document]:
         document.metadata[SOURCE_PATH_KEY] = source
         document.metadata["source"] = Path(source).name
     return documents
+
+
+class TextFileLoader:
+    """A UTF-8 text or Markdown file as one document."""
+
+    def __init__(self, file_path: str) -> None:
+        self.file_path = file_path
+
+    def load(self) -> List[Document]:
+        text = Path(self.file_path).read_text(encoding="utf-8")
+        return [Document(page_content=text, metadata={"source": self.file_path})]
+
+
+class PdfLoader:
+    """One document per PDF page, numbered from 0 as LangChain's loader did."""
+
+    def __init__(self, file_path: str) -> None:
+        self.file_path = file_path
+
+    def load(self) -> List[Document]:
+        from pypdf import PdfReader
+
+        reader = PdfReader(self.file_path)
+        return [
+            Document(
+                page_content=page.extract_text() or "",
+                metadata={"source": self.file_path, "page": number},
+            )
+            for number, page in enumerate(reader.pages)
+        ]
 
 
 class DocxLoader:
@@ -67,9 +101,9 @@ class DocumentLoader:
     """Loads documents from various file formats."""
 
     SUPPORTED_EXTENSIONS = {
-        ".pdf": PyPDFLoader,
-        ".txt": TextLoader,
-        ".md": TextLoader,
+        ".pdf": PdfLoader,
+        ".txt": TextFileLoader,
+        ".md": TextFileLoader,
         ".docx": DocxLoader,
     }
 
@@ -115,11 +149,15 @@ class DocumentLoader:
     @classmethod
     def load_directory(cls, directory_path: str, glob_pattern: str = "**/*") -> List[Document]:
         """
-        Load all supported documents from a directory.
+        Load every supported file under a directory.
+
+        Tolerant per file: one PDF the parser chokes on is logged and skipped
+        rather than costing the rest of the corpus. Extensions match
+        case-insensitively, as they do for a single file.
 
         Args:
             directory_path: Path to the directory
-            glob_pattern: Glob pattern for file matching
+            glob_pattern: Glob pattern selecting candidate files
 
         Returns:
             List of Document objects
@@ -130,35 +168,24 @@ class DocumentLoader:
             logger.error("directory_not_found", directory_path=directory_path)
             raise NotADirectoryError(f"Directory not found: {directory_path}")
 
-        all_documents = []
+        all_documents: List[Document] = []
+        failed = 0
 
-        for extension, loader_class in cls.SUPPORTED_EXTENSIONS.items():
+        for file_path in sorted(path.glob(glob_pattern)):
+            loader_class = cls.SUPPORTED_EXTENSIONS.get(file_path.suffix.lower())
+            if loader_class is None or not file_path.is_file():
+                continue
             try:
-                loader = DirectoryLoader(
-                    str(path),
-                    glob=f"{glob_pattern}{extension}",
-                    loader_cls=loader_class,
-                    show_progress=True,
-                    use_multithreading=True,
-                )
-                documents = label_sources(loader.load())
-                all_documents.extend(documents)
-                logger.info(
-                    "directory_files_loaded",
-                    extension=extension,
-                    num_documents=len(documents),
-                )
+                all_documents.extend(label_sources(loader_class(str(file_path)).load()))
             except Exception as e:
-                logger.warning(
-                    "directory_load_partial_failure",
-                    extension=extension,
-                    error=str(e),
-                )
+                failed += 1
+                logger.warning("file_load_skipped", file_path=str(file_path), error=str(e))
 
         logger.info(
             "directory_load_complete",
             directory_path=directory_path,
             total_documents=len(all_documents),
+            files_skipped=failed,
         )
 
         return all_documents

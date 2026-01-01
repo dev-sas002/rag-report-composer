@@ -111,15 +111,78 @@ class TestDirectory:
 
     def test_one_broken_format_does_not_lose_the_others(self, corpus):
         """
-        Directory loading is deliberately per-extension and tolerant: a PDF
-        that a parser chokes on must not discard the Markdown that loaded
-        fine. It is logged as a partial failure rather than raised.
+        Directory loading is tolerant: a PDF that a parser chokes on must not
+        discard the Markdown that loaded fine. It is logged, not raised.
         """
         broken = Mock(side_effect=RuntimeError("pdf parser exploded"))
         with patch.dict(DocumentLoader.SUPPORTED_EXTENSIONS, {".pdf": broken}):
             documents = DocumentLoader.load_directory(str(corpus))
 
         assert any("annual_report.md" in doc.metadata["source"] for doc in documents)
+
+    def test_one_unreadable_file_does_not_lose_its_siblings(self, tmp_path):
+        """Isolation is per file, not per format: two .md files, one bad."""
+        (tmp_path / "good.md").write_text("Revenue grew.\n", encoding="utf-8")
+        (tmp_path / "bad.md").write_bytes(b"\xff\xfe not utf-8 \xff")
+
+        documents = DocumentLoader.load_directory(str(tmp_path))
+
+        assert [doc.metadata["source"] for doc in documents] == ["good.md"]
+
+    def test_extensions_match_case_insensitively(self, tmp_path):
+        (tmp_path / "NOTES.TXT").write_text("Shouty file name.\n", encoding="utf-8")
+
+        documents = DocumentLoader.load_directory(str(tmp_path))
+
+        assert [doc.metadata["source"] for doc in documents] == ["NOTES.TXT"]
+
+    def test_files_in_subdirectories_are_found(self, tmp_path):
+        (tmp_path / "2025" / "q4").mkdir(parents=True)
+        (tmp_path / "2025" / "q4" / "board.md").write_text("Nested.\n", encoding="utf-8")
+
+        documents = DocumentLoader.load_directory(str(tmp_path))
+
+        assert [doc.metadata["source"] for doc in documents] == ["board.md"]
+
+
+class TestPdf:
+    def test_each_page_becomes_a_document_with_its_page_number(self, tmp_path, monkeypatch):
+        import pypdf
+
+        class FakePage:
+            def __init__(self, text):
+                self.text = text
+
+            def extract_text(self):
+                return self.text
+
+        class FakeReader:
+            def __init__(self, path):
+                self.pages = [FakePage("Page one text."), FakePage(None)]
+
+        monkeypatch.setattr(pypdf, "PdfReader", FakeReader)
+        path = tmp_path / "deck.pdf"
+        path.write_bytes(b"%PDF-1.4 placeholder")
+
+        documents = DocumentLoader.load_file(str(path))
+
+        assert [d.page_content for d in documents] == ["Page one text.", ""]
+        assert [d.metadata["page"] for d in documents] == [0, 1]
+        assert {d.metadata["source"] for d in documents} == {"deck.pdf"}
+
+    def test_a_real_pdf_round_trips_through_pypdf(self, tmp_path):
+        from pypdf import PdfWriter
+
+        writer = PdfWriter()
+        writer.add_blank_page(width=200, height=200)
+        path = tmp_path / "blank.pdf"
+        with open(path, "wb") as handle:
+            writer.write(handle)
+
+        documents = DocumentLoader.load_file(str(path))
+
+        assert len(documents) == 1
+        assert documents[0].metadata["source"] == "blank.pdf"
 
 
 class TestSourceLabelling:

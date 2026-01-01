@@ -51,7 +51,6 @@ def check_dependencies():
 
     required_packages = [
         "langchain_core",
-        "langchain_community",
         "langchain_text_splitters",
         "langchain_chroma",
         "langchain_openai",
