@@ -1,10 +1,11 @@
 """
 Structured logging configuration using structlog.
-Provides consistent, JSON-formatted logs for production environments.
+Console output for development, JSON for production, and a rotating log file.
 """
 
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
@@ -36,62 +37,13 @@ def _get_log_level(level_name: str) -> int:
         return logging.INFO
 
 
-def _has_file_handler_for(log_file: Path) -> bool:
-    """Check whether a file handler for the given log file is already registered."""
-    for handler in logging.root.handlers:
-        if isinstance(handler, logging.FileHandler) and getattr(
-            handler, "baseFilename", None
-        ) == str(log_file):
-            return True
-    return False
+#: Marks the handlers `setup_logging` installed, so calling it twice (the CLI
+#: and the API both do, and tests import both) does not double every line.
+_HANDLER_TAG = "_report_generator_handler"
 
 
-def _add_file_handler(log_file: Path, level: int) -> None:
-    """
-    Attach a file handler for the given log file.
-
-    Any exceptions are allowed to bubble up to the caller so they can
-    decide how to degrade gracefully.
-    """
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(level)
-    logging.root.addHandler(file_handler)
-
-
-def setup_logging() -> None:
-    """Configure structured logging for the application."""
-    settings = get_settings()
-
-    # Configure standard library logging for stdout first so that we always
-    # have at least one working sink, even if file-based logging fails.
-    log_level = _get_log_level(settings.log_level)
-    logging.basicConfig(
-        format="%(message)s",
-        stream=sys.stdout,
-        level=log_level,
-    )
-
-    # Configure file-based logging, but degrade gracefully if the directory
-    # or file cannot be created (e.g. read-only filesystem).
-    log_dir = Path(settings.log_dir)
-    log_file = log_dir / settings.log_file
-
-    try:
-        log_dir.mkdir(parents=True, exist_ok=True)
-
-        if not _has_file_handler_for(log_file):
-            _add_file_handler(log_file, log_level)
-    except Exception as exc:  # pragma: no cover - defensive fallback
-        logging.getLogger(__name__).warning(
-            "file_logging_disabled",
-            extra={
-                "log_file": str(log_file),
-                "error": str(exc),
-            },
-        )
-
-    # Configure structlog processors
-    processors: list[Processor] = [
+def _shared_processors() -> list[Processor]:
+    return [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
@@ -103,14 +55,69 @@ def setup_logging() -> None:
         structlog.processors.UnicodeDecoder(),
     ]
 
-    # Add JSON renderer for production, ConsoleRenderer for development
-    if settings.environment == "production":
-        processors.append(structlog.processors.JSONRenderer())
+
+def _install_handler(handler: logging.Handler, renderer: Processor, level: int) -> None:
+    handler.setLevel(level)
+    handler.setFormatter(
+        structlog.stdlib.ProcessorFormatter(
+            processor=renderer, foreign_pre_chain=_shared_processors()
+        )
+    )
+    setattr(handler, _HANDLER_TAG, True)
+    logging.root.addHandler(handler)
+
+
+def setup_logging() -> None:
+    """
+    Configure structured logging for the application.
+
+    Rendering happens per handler rather than once for all of them. The console
+    gets colour when it is a terminal; the log file never does. Rendering once
+    with colours on wrote ANSI escape codes into `logs/app.log`, which made it
+    unreadable in anything but a terminal and ungreppable even there.
+    """
+    settings = get_settings()
+    log_level = _get_log_level(settings.log_level)
+    production = settings.environment == "production"
+
+    for handler in [h for h in logging.root.handlers if getattr(h, _HANDLER_TAG, False)]:
+        logging.root.removeHandler(handler)
+        handler.close()
+    logging.root.setLevel(log_level)
+
+    console_renderer: Processor = (
+        structlog.processors.JSONRenderer()
+        if production
+        else structlog.dev.ConsoleRenderer(colors=sys.stdout.isatty())
+    )
+    _install_handler(logging.StreamHandler(sys.stdout), console_renderer, log_level)
+
+    # The file handler rotates on LOG_ROTATION_SIZE_MB / LOG_BACKUP_COUNT. A
+    # plain FileHandler ignored both settings and grew without bound.
+    log_file = Path(settings.log_dir) / settings.log_file
+    try:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=settings.log_rotation_size_mb * 1024 * 1024,
+            backupCount=settings.log_backup_count,
+            encoding="utf-8",
+        )
+    except OSError as exc:  # pragma: no cover - read-only filesystem
+        logging.getLogger(__name__).warning("file_logging_disabled: %s (%s)", log_file, exc)
     else:
-        processors.append(structlog.dev.ConsoleRenderer(colors=True))
+        file_renderer: Processor = (
+            structlog.processors.JSONRenderer()
+            if production
+            else structlog.dev.ConsoleRenderer(colors=False)
+        )
+        _install_handler(file_handler, file_renderer, log_level)
 
     structlog.configure(
-        processors=processors,
+        processors=[
+            *_shared_processors(),
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
         wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
