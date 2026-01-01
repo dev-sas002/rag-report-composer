@@ -67,8 +67,8 @@ EMBEDDING_MODEL = "text-embedding-3-large"
 REPORT_OUTPUT_TOKENS = 2000
 SUMMARY_OUTPUT_TOKENS = 300
 
-# Stands in for "no cap at all" when pricing the behaviour this uplift
-# replaced. Large enough that MAX_CONTEXT_CHARS never binds.
+# Stands in for "no cap at all" when pricing the naive behaviour that context
+# assembly replaced. Large enough that MAX_CONTEXT_CHARS never binds.
 UNBOUNDED = 10_000_000
 
 QUERIES = [

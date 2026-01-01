@@ -4,7 +4,7 @@ Deterministic grounding measurement.
 One implementation, used in two places: the evaluation harness scores a fixed
 question set with it, and the graph attaches the same number to every report it
 produces. They must not drift — a groundedness score shown to a user and a
-groundedness score printed by CI that were computed differently is worse than
+groundedness score printed by the evaluation that were computed differently is worse than
 having only one of them.
 
 Standard library only, on purpose. This module is imported by

@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     report_output_dir: str = Field(default="./reports", description="Report output directory")
 
     # Provider selection. "auto" follows the presence of an API key; "openai"
-    # and "local" force a choice and are what CI and the demo use.
+    # and "local" force a choice, e.g. to stay offline with a key in the env.
     provider_mode: str = Field(default="auto", description="auto | openai | local")
     local_embedding_model: str = Field(
         default="sentence-transformers/all-MiniLM-L6-v2",

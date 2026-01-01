@@ -170,7 +170,7 @@ class RetrievalEvaluator:
 
         Delegated to `grounding.groundedness`, which is also what the graph
         attaches to every report it produces. One implementation, so a score a
-        user is shown and a score CI prints cannot drift apart — two numbers
+        user is shown and a score the evaluation prints cannot drift apart — two numbers
         with the same name computed two ways is worse than having only one.
         """
         return groundedness(report, [getattr(d, "page_content", "") for d in documents])

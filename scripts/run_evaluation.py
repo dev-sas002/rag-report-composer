@@ -6,8 +6,8 @@ Score the live retrieval pipeline against a fixed question set.
 
 Runs against whichever backend is configured, so the same command measures the
 offline local model and a live OpenAI setup and prints comparable numbers.
-Exits non-zero when a threshold is missed, which is what makes it usable as a
-CI gate rather than a report nobody reads.
+Exits non-zero when a threshold is missed, so it can gate a change rather than
+be a report nobody reads.
 """
 
 import sys
