@@ -5,7 +5,7 @@ it does and how it is put together.
 
 ## Prerequisites
 
-- Python 3.11 or higher (or Docker)
+- Python 3.12 (see `.python-version`), or Docker
 - ~3GB of disk space — the dependency tree includes PyTorch
 - An OpenAI API key is **optional**. Without one the app uses a local embedding
   model and an extractive writer, and everything still works end to end.
@@ -107,7 +107,7 @@ python -m pytest -q                           # run the test suite
 ./scripts/start_api.sh                        # serve the API on :8350
 ```
 
-Supported document formats: `.pdf`, `.txt`, `.md`, `.docx`, `.doc`.
+Supported document formats: `.pdf`, `.txt`, `.md`, `.docx`.
 
 `make help` lists the equivalent Make targets.
 

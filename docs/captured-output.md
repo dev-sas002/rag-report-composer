@@ -27,6 +27,7 @@ $ LOG_LEVEL=WARNING python main.py --query "What do customers complain about mos
 
 ⏳ Generating report...
 
+
 ================================================================================
 EXECUTIVE SUMMARY
 ================================================================================
@@ -95,10 +96,10 @@ groundedness score at the bottom checkable rather than decorative.
 ```console
 $ curl -s http://localhost:8350/health
 {
-    "status": "healthy",
-    "app_name": "RAG Company Report Generator",
-    "version": "1.0.0",
-    "vector_store_documents": 6
+  "status": "healthy",
+  "app_name": "RAG Company Report Generator",
+  "version": "1.0.0",
+  "vector_store_documents": 6
 }
 ```
 
@@ -107,41 +108,41 @@ $ curl -s -X POST http://localhost:8350/query \
     -H 'Content-Type: application/json' \
     -d '{"query": "What do customers complain about most?"}'
 {
-    "query": "What do customers complain about most?",
-    "report": "## What do customers complain about most\n\nThe following passages were retrieved from the indexed documents and are reproduced verbatim.\n\n- ## What customers complained about Reporting flexibility remains the largest source of dissatisfaction, named in 44 percent of negative responses. [S1]\n\n- Customers want to build their own views rather than choose from fixed dashboards. [S1]\n\n- Export limits were the second complaint, at 27 percent. [S1]\n\n- Pricing transparency appeared in 19 percent of negative responses, almost entirely from mid-market accounts moving between tiers. [S1]\n\n- # Customer Satisfaction \u2014 Q4 Review ## Headline numbers Net Promoter Score finished the quarter at 41, up from 33 in Q3 and 28 a year ago. [S2]\n\n- Customer Satisfaction (CSAT) on support interactions averaged 4.4 out of 5 across 3,812 rated conversations. [S2]\n\n- Median first-response time fell to 47 minutes from 2 hours 20 minutes, following the move to a follow-the-sun rota across the London and Vancouver teams. [S2]\n\n- ## What customers praised Reliability was the most frequently cited strength, appearing in 61 percent of positive free-text responses. [S2]\n\n---\n\n*Written offline by the extractive writer: every line above appears in the source material. Configure `OPENAI_API_KEY` for a synthesised narrative report.*",
-    "summary": "## What customers complained about Reporting flexibility remains the largest source of dissatisfaction, named in 44 percent of negative responses. [S1] Customers want to build their own views rather than choose from fixed dashboards. [S1] Export limits were the second complaint, at 27 percent. [S1] Pricing transparency appeared in 19 percent of negative responses, almost entirely from mid-market accounts moving between tiers. [S1]",
-    "sources": [
-        "customer_satisfaction_q4.md",
-        "customer_satisfaction_q4.md"
-    ],
-    "citations": [
-        {
-            "id": "S1",
-            "source": "customer_satisfaction_q4.md",
-            "score": 0.8960953787447283,
-            "excerpt": "## What customers complained about\n\nReporting flexibility remains the largest source of dissatisfaction, named in 44\npercent of negative responses. Customers want to build their own views rather\nthan choose from fixed dashboards. Export limits were the second complaint, at\n27 per"
-        },
-        {
-            "id": "S2",
-            "source": "customer_satisfaction_q4.md",
-            "score": 1.2067741668107794,
-            "excerpt": "# Customer Satisfaction \u2014 Q4 Review\n\n## Headline numbers\n\nNet Promoter Score finished the quarter at 41, up from 33 in Q3 and 28 a year\nago. Customer Satisfaction (CSAT) on support interactions averaged 4.4 out of 5\nacross 3,812 rated conversations.\n\nMedian first-response time fe"
-        }
-    ],
-    "citation_audit": {
-        "valid": [
-            "S1",
-            "S2"
-        ],
-        "invalid": [],
-        "unused": [],
-        "groundedness": 1.0,
-        "ungrounded_sample": []
+  "query": "What do customers complain about most?",
+  "report": "## What do customers complain about most\n\nThe following passages were retrieved from the indexed documents and are reproduced verbatim.\n\n- ## What customers complained about Reporting flexibility remains the largest source of dissatisfaction, named in 44 percent of negative responses. [S1]\n\n- Customers want to build their own views rather than choose from fixed dashboards. [S1]\n\n- Export limits were the second complaint, at 27 percent. [S1]\n\n- Pricing transparency appeared in 19 percent of negative responses, almost entirely from mid-market accounts moving between tiers. [S1]\n\n- # Customer Satisfaction — Q4 Review ## Headline numbers Net Promoter Score finished the quarter at 41, up from 33 in Q3 and 28 a year ago. [S2]\n\n- Customer Satisfaction (CSAT) on support interactions averaged 4.4 out of 5 across 3,812 rated conversations. [S2]\n\n- Median first-response time fell to 47 minutes from 2 hours 20 minutes, following the move to a follow-the-sun rota across the London and Vancouver teams. [S2]\n\n- ## What customers praised Reliability was the most frequently cited strength, appearing in 61 percent of positive free-text responses. [S2]\n\n---\n\n*Written offline by the extractive writer: every line above appears in the source material. Configure `OPENAI_API_KEY` for a synthesised narrative report.*",
+  "summary": "## What customers complained about Reporting flexibility remains the largest source of dissatisfaction, named in 44 percent of negative responses. [S1] Customers want to build their own views rather than choose from fixed dashboards. [S1] Export limits were the second complaint, at 27 percent. [S1] Pricing transparency appeared in 19 percent of negative responses, almost entirely from mid-market accounts moving between tiers. [S1]",
+  "sources": [
+    "customer_satisfaction_q4.md",
+    "customer_satisfaction_q4.md"
+  ],
+  "citations": [
+    {
+      "id": "S1",
+      "source": "customer_satisfaction_q4.md",
+      "score": 0.8960952758789062,
+      "excerpt": "## What customers complained about\n\nReporting flexibility remains the largest source of dissatisfaction, named in 44\npercent of negative responses. Customers want to build their own views rather\nthan choose from fixed dashboards. Export limits were the second complaint, at\n27 per"
     },
+    {
+      "id": "S2",
+      "source": "customer_satisfaction_q4.md",
+      "score": 1.2067742347717285,
+      "excerpt": "# Customer Satisfaction — Q4 Review\n\n## Headline numbers\n\nNet Promoter Score finished the quarter at 41, up from 33 in Q3 and 28 a year\nago. Customer Satisfaction (CSAT) on support interactions averaged 4.4 out of 5\nacross 3,812 rated conversations.\n\nMedian first-response time fe"
+    }
+  ],
+  "citation_audit": {
+    "valid": [
+      "S1",
+      "S2"
+    ],
+    "invalid": [],
+    "unused": [],
     "groundedness": 1.0,
-    "num_tokens_used": 1099,
-    "total_cost_usd": 0.0,
-    "saved_file": null
+    "ungrounded_sample": []
+  },
+  "groundedness": 1.0,
+  "num_tokens_used": 1099,
+  "total_cost_usd": 0.0,
+  "saved_file": null
 }
 ```
 
@@ -210,14 +211,14 @@ also logs `invented_citations` at ERROR when this happens.
 
 ```console
 $ python scripts/run_evaluation.py
-backend=local pass=6/6 recall=1.00 precision=0.40 faithfulness=0.98 p95=6399ms
+backend=local pass=6/6 recall=1.00 precision=0.40 faithfulness=0.98 p95=7157ms
 
-  ✓ revenue-growth     recall=1.00 precision=0.40 faith=0.94 6399ms
-  ✓ margin             recall=1.00 precision=0.40 faith=0.98 19ms
-  ✓ complaints         recall=1.00 precision=0.40 faith=0.99 6ms
-  ✓ nps                recall=1.00 precision=0.40 faith=0.99 18ms
-  ✓ modules            recall=1.00 precision=0.40 faith=0.98 33ms
-  ✓ deployment         recall=1.00 precision=0.40 faith=0.99 19ms
+  ✓ revenue-growth     recall=1.00 precision=0.40 faith=0.94 7157ms
+  ✓ margin             recall=1.00 precision=0.40 faith=0.98 20ms
+  ✓ complaints         recall=1.00 precision=0.40 faith=0.99 3ms
+  ✓ nps                recall=1.00 precision=0.40 faith=0.99 16ms
+  ✓ modules            recall=1.00 precision=0.40 faith=0.98 24ms
+  ✓ deployment         recall=1.00 precision=0.40 faith=0.99 47ms
 
   citation groundedness: mean 1.00
 
@@ -265,7 +266,7 @@ whitespace at a chunk boundary, not text going missing.
 2. Embedding cache
 ------------------
 Corpus re-ingested twice: 6 chunks, 3,977 characters
-  cold:     1.3 ms,    6 embedded, $0.00013 of embedding billed
+  cold:     2.4 ms,    6 embedded, $0.00013 of embedding billed
   warm:     0.1 ms,    0 embedded, $0.00000 billed
   hit rate after two passes: 50%
 
@@ -276,10 +277,10 @@ local sentence-transformer it skips the same number of forward passes.
 3. Query latency against corpus size
 ------------------------------------
   chunks  index (ms)  p50 (ms)  p95 (ms)
-       6         0.6      0.16      0.17
-      48         4.3      1.13      1.23
-     384        34.3      8.91      9.12
-    1536       138.8     35.98     36.32
+       6         0.5      0.16      0.17
+      48         3.8      1.09      1.13
+     384        29.8      8.64      8.78
+    1536       123.2     34.65     35.42
 
 Brute-force cosine over a list: latency is linear in the corpus, because every
 query scores every chunk. Chroma's HNSW index is sub-linear, which is the whole
@@ -347,7 +348,7 @@ output tokens are billed at 3x the input rate and are unaffected by any of this.
 
 ```console
 $ python -m pytest -q
-282 passed, 2 warnings in 2.12s
+296 passed in 1.77s
 ```
 
 No test makes a network call. `tests/test_network_guard.py` proves it by
