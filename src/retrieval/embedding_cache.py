@@ -135,28 +135,28 @@ class CachingEmbeddings(Embeddings):
         cached = self.store.get_many(keys)
 
         # Deduplicate within the batch too: two identical chunks in one call
-        # were previously embedded twice before either reached the cache.
-        missing_order: List[str] = []
-        missing_texts: List[str] = []
+        # were previously embedded twice before either reached the cache. A
+        # dict keeps first-seen order with O(1) membership; the list this
+        # replaced made a large ingestion batch quadratic in its size.
+        missing: Dict[str, str] = {}
         for key, text in zip(keys, texts):
-            if key not in cached and key not in missing_order:
-                missing_order.append(key)
-                missing_texts.append(text)
+            if key not in cached and key not in missing:
+                missing[key] = text
 
-        if missing_texts:
-            fresh = self.inner.embed_documents(missing_texts)
-            new = dict(zip(missing_order, fresh))
+        if missing:
+            fresh = self.inner.embed_documents(list(missing.values()))
+            new = dict(zip(missing, fresh))
             self.store.put_many(new)
             cached.update(new)
 
-        self.hits += len(texts) - len(missing_texts)
-        self.misses += len(missing_texts)
+        self.hits += len(texts) - len(missing)
+        self.misses += len(missing)
 
         logger.debug(
             "embedding_cache_batch",
             texts=len(texts),
-            hits=len(texts) - len(missing_texts),
-            misses=len(missing_texts),
+            hits=len(texts) - len(missing),
+            misses=len(missing),
         )
         return [cached[key] for key in keys]
 

@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-import requests
+import httpx
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -17,6 +17,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # API base URL - check if custom port is provided
 API_PORT = os.environ.get("API_PORT", "8350")
 BASE_URL = f"http://localhost:{API_PORT}"
+# The first /query loads the embedding model, which takes several seconds.
+TIMEOUT = 120
 
 
 def print_section(title):
@@ -31,7 +33,7 @@ def test_health():
     print_section("Testing Health Endpoint")
 
     try:
-        response = requests.get(f"{BASE_URL}/health")
+        response = httpx.get(f"{BASE_URL}/health", timeout=TIMEOUT)
         response.raise_for_status()
 
         data = response.json()
@@ -51,7 +53,7 @@ def test_stats():
     print_section("Testing Stats Endpoint")
 
     try:
-        response = requests.get(f"{BASE_URL}/stats")
+        response = httpx.get(f"{BASE_URL}/stats", timeout=TIMEOUT)
         response.raise_for_status()
 
         data = response.json()
@@ -74,7 +76,7 @@ def test_ingest_text():
             "source_name": "api_test_document",
         }
 
-        response = requests.post(f"{BASE_URL}/ingest/text", json=payload)
+        response = httpx.post(f"{BASE_URL}/ingest/text", json=payload, timeout=TIMEOUT)
         response.raise_for_status()
 
         data = response.json()
@@ -100,7 +102,7 @@ def test_query():
         }
 
         print("Generating report (this may take 10-15 seconds)...")
-        response = requests.post(f"{BASE_URL}/query", json=payload)
+        response = httpx.post(f"{BASE_URL}/query", json=payload, timeout=TIMEOUT)
         response.raise_for_status()
 
         data = response.json()
@@ -127,7 +129,7 @@ def test_costs():
     print_section("Testing Costs Endpoint")
 
     try:
-        response = requests.get(f"{BASE_URL}/costs")
+        response = httpx.get(f"{BASE_URL}/costs", timeout=TIMEOUT)
         response.raise_for_status()
 
         data = response.json()
@@ -149,7 +151,7 @@ def test_root():
     print_section("Testing Root Endpoint")
 
     try:
-        response = requests.get(f"{BASE_URL}/")
+        response = httpx.get(f"{BASE_URL}/", timeout=TIMEOUT)
         response.raise_for_status()
 
         data = response.json()

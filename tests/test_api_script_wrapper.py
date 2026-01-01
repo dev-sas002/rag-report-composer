@@ -1,4 +1,4 @@
-"""Tests that wrap the scripts/test_api helpers with mocked requests."""
+"""Tests that wrap the scripts/test_api helpers with a mocked HTTP client."""
 
 from unittest.mock import Mock
 
@@ -11,12 +11,19 @@ def test_print_section_formats_title(capsys):
     assert "Section Title" in out
 
 
-def test_test_root_uses_requests_get(monkeypatch):
+def test_test_root_calls_the_root_endpoint(monkeypatch):
     fake_response = Mock()
     fake_response.raise_for_status.return_value = None
     fake_response.json.return_value = {"message": "ok", "version": "1.0.0"}
 
-    monkeypatch.setattr("scripts.test_api.requests.get", lambda url: fake_response)
+    seen = {}
+
+    def fake_get(url, timeout):
+        seen["url"] = url
+        return fake_response
+
+    monkeypatch.setattr("scripts.test_api.httpx.get", fake_get)
 
     ok = api_script.test_root()
     assert ok is True
+    assert seen["url"].endswith("/")
