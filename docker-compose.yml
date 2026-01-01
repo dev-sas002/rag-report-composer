@@ -27,6 +27,11 @@ services:
       # Keep the model cache on a volume so a restart does not re-download it.
       HF_HOME: /app/data/hf
       SENTENCE_TRANSFORMERS_HOME: /app/data/hf
+      # The image already holds the model, so there is nothing to fetch: offline
+      # mode stops every start-up from asking the Hub whether it changed, and
+      # lets the stack run with no internet at all. Set it to 0 to try a
+      # different LOCAL_EMBEDDING_MODEL.
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-1}
       # Embeddings are a pure function of (model, text); the cache shares the
       # volume with the index so a restart does not re-embed the corpus.
       ENABLE_EMBEDDING_CACHE: ${ENABLE_EMBEDDING_CACHE:-true}

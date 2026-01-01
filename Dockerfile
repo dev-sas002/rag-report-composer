@@ -8,10 +8,9 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# No compiler: every pinned dependency installs from a prebuilt Python 3.12
+# wheel (every one resolved to a .whl on linux/arm64), so build-essential only
+# made the builder slower to pull.
 
 # Create virtual environment
 RUN python -m venv /opt/venv
@@ -31,10 +30,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH"
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+# No apt packages: torch and scikit-learn bundle their own OpenMP runtime, and
+# the offline pipeline was verified end to end on a bare python:3.12-slim.
 
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
