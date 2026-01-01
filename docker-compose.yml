@@ -1,0 +1,55 @@
+# The RAG report generator, running with no API key:
+#
+#   docker compose up --build
+#
+# Without OPENAI_API_KEY the app selects a local sentence-transformer for
+# embeddings and an extractive writer for reports, so ingestion, retrieval and
+# report generation all work end to end offline. Add a key to .env to switch to
+# OpenAI; nothing else changes.
+#
+# API + Swagger: http://localhost:8350/docs
+
+name: rag-report-generator
+
+services:
+  api:
+    build:
+      context: .
+    environment:
+      PYTHONUNBUFFERED: 1
+      CHROMA_PERSIST_DIRECTORY: /app/data/chroma_db
+      REPORT_OUTPUT_DIR: /app/reports
+      LOG_DIR: /app/logs
+      # Unset by default. `env_file` is deliberately not used: it made the
+      # whole stack refuse to start unless a .env file already existed.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      PROVIDER_MODE: ${PROVIDER_MODE:-auto}
+      # Keep the model cache on a volume so a restart does not re-download it.
+      HF_HOME: /app/data/hf
+      SENTENCE_TRANSFORMERS_HOME: /app/data/hf
+      # Embeddings are a pure function of (model, text); the cache shares the
+      # volume with the index so a restart does not re-embed the corpus.
+      ENABLE_EMBEDDING_CACHE: ${ENABLE_EMBEDDING_CACHE:-true}
+      EMBEDDING_CACHE_PATH: /app/data/embedding_cache.sqlite
+      VECTOR_BACKEND: ${VECTOR_BACKEND:-chroma}
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-auto}
+    ports:
+      # 8350 on the host; 8000 stays the in-container port.
+      - "8350:8000"
+    volumes:
+      - app-data:/app/data
+      - ./reports:/app/reports
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status==200 else 1)"]
+      interval: 20s
+      timeout: 8s
+      start_period: 90s
+      retries: 5
+    command: >
+      sh -c "python scripts/ingest_sample_data.py || true;
+             uvicorn src.api.main:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  app-data:
