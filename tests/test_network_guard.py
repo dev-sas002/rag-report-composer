@@ -62,11 +62,21 @@ class TestTheGuardRefusesOutboundConnections:
         # what has to survive, otherwise a real timeout would look the same.
         assert "tests must not make real network calls" in str(caught.value)
 
-    def test_a_hostname_resolving_off_box_is_refused(self):
+    def test_a_hostname_resolving_off_box_is_refused(self, monkeypatch):
         """
         Guarding on the address passed to `connect` covers hostnames too: the
         resolver runs first and hands `connect` a public IP.
+
+        The resolver is stubbed to return a documentation address. Asking real
+        DNS made the test depend on the machine it ran on: in a sandbox with no
+        network the lookup itself failed first, and the guard was never reached.
         """
+
+        def resolve_off_box(host, port, *args, **kwargs):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("203.0.113.7", port))]
+
+        monkeypatch.setattr(socket, "getaddrinfo", resolve_off_box)
+
         with pytest.raises(Exception) as caught:
             socket.create_connection(("api.openai.com", 443), timeout=2)
 
