@@ -9,7 +9,7 @@ not there, a format nothing can read, and a directory holding a mixture.
 from unittest.mock import Mock, patch
 
 import pytest
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from src.utils.document_loader import DocumentLoader, label_sources
 

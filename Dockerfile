@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for RAG Company Report Generator
 # Stage 1: Builder
-FROM python:3.11-slim as builder
+FROM python:3.12-slim AS builder
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -17,13 +17,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy requirements and install Python dependencies
+# requirements.txt names the CPU-only PyTorch index itself, so this pulls the
+# CPU build rather than several gigabytes of CUDA libraries.
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
 # Stage 2: Runtime
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -64,6 +65,12 @@ ENV HF_HOME=/app/data/hf \
 RUN python -c "from sentence_transformers import SentenceTransformer; \
     SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')" || \
     echo "model warm-up skipped; it will download on first use"
+
+# The same for tiktoken's BPE table, which token counting fetches on first use.
+# Without it an offline container estimates tokens as characters / 4.
+ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken
+RUN python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')" || \
+    echo "tiktoken warm-up skipped; token counts fall back to an estimate"
 
 # The API's port inside the container. The compose file publishes it on 8350
 # of the host; 8000 is only ever seen from inside the network namespace, where

@@ -3,7 +3,7 @@
 from unittest.mock import Mock
 
 import pytest
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from src.agent.nodes import (
     AgentNodes,

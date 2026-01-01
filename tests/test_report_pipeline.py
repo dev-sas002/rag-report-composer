@@ -12,7 +12,7 @@ import re
 from unittest.mock import Mock
 
 import pytest
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from src.agent.graph import ReportGenerationGraph
 from src.agent.local_llm import ExtractiveReportWriter

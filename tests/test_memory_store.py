@@ -8,7 +8,7 @@ agent actually depends on: ordering, `k`, and the score's polarity.
 """
 
 import pytest
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from src.retrieval.hashing_embeddings import HashingEmbeddings
 from src.retrieval.memory_store import InMemoryVectorStore, cosine_distance

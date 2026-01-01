@@ -3,7 +3,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from src.retrieval.vector_store import VectorStore, VectorStoreBackend
 

@@ -1,47 +1,41 @@
-# Core LangChain and LangGraph - Updated for compatibility
-langchain==0.3.7
-langchain-openai==0.2.8
-langchain-community==0.3.7
-langchain-core==0.3.17
-langgraph==0.2.45
-langgraph-cli==0.1.59
-langsmith==0.1.143
+# Exact pins, resolved and tested together on Python 3.12 (see .python-version).
+#
+# The extra index serves CPU-only PyTorch for Linux. Without it pip installs the
+# CUDA build that sentence-transformers would otherwise pull, several gigabytes
+# of GPU libraries this project never uses. macOS wheels are unaffected.
+--extra-index-url https://download.pytorch.org/whl/cpu
 
-# Vector Database
-chromadb==0.5.23
-sentence-transformers==3.3.1
+# LangChain and LangGraph
+langchain-core==1.7.6
+langchain-community==0.4.2
+langchain-openai==1.7.4
+langchain-text-splitters==1.1.3
+langchain-chroma==1.1.0
+langgraph==1.2.20
 
-# Data Processing
-pypdf==5.1.0
-python-docx==1.1.2
-openpyxl==3.1.5
-pandas==2.2.3
-numpy==1.26.4
+# Vector store and local embeddings
+chromadb==1.5.9
+sentence-transformers==6.2.0
 
-# Environment & Configuration
-python-dotenv==1.0.1
-pydantic==2.10.2
-pydantic-settings==2.6.1
+# Document loading
+pypdf==7.0.0
+python-docx==1.2.0
 
-# Observability & Logging
-structlog==24.4.0
-python-json-logger==3.2.1
-tiktoken==0.8.0
+# Configuration
+pydantic==2.14.3
+pydantic-settings==2.16.2
 
-# API & Web
-fastapi==0.115.5
-uvicorn[standard]==0.32.1
-httpx==0.27.2
-python-multipart==0.0.20
+# Observability
+structlog==26.1.0
+tiktoken==0.14.0
 
-# Utilities
-tenacity==9.0.0
-colorama==0.4.6
-tqdm==4.67.1
-python-dateutil==2.9.0.post0
+# API
+fastapi==0.162.2
+uvicorn[standard]==0.54.0
+httpx==0.28.1
+python-multipart==0.0.33
 
 # Development
-pytest==8.3.4
-pytest-asyncio==0.24.0
-black==24.10.0
-ruff==0.7.4
+pytest==9.2.0
+black==26.10.1
+ruff==0.17.4

@@ -45,8 +45,8 @@ import structlog  # noqa: E402
 # output, so quieten structlog before anything that logs is imported.
 structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(logging.WARNING))
 
-from langchain.schema import Document  # noqa: E402
-from langchain.text_splitter import RecursiveCharacterTextSplitter  # noqa: E402
+from langchain_core.documents import Document  # noqa: E402
+from langchain_text_splitters import RecursiveCharacterTextSplitter  # noqa: E402
 
 from src.agent.context import assemble_context  # noqa: E402
 from src.agent.nodes import build_report_prompt  # noqa: E402

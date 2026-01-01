@@ -5,7 +5,7 @@ Defines the data structure passed between nodes in the graph.
 
 from typing import Annotated, Any, Dict, List, Optional
 
-from langchain.schema import Document
+from langchain_core.documents import Document
 from typing_extensions import TypedDict
 
 from .context import Citation

@@ -92,7 +92,7 @@ def hashing_embeddings(settings: Any) -> Any:
 
 def chroma_backend(settings: Any, *, embeddings: Any, client: Any = None) -> Any:
     """Persistent ChromaDB, the default."""
-    from langchain_community.vectorstores import Chroma
+    from langchain_chroma import Chroma
 
     return Chroma(
         client=client,

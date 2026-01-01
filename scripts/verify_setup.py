@@ -50,7 +50,10 @@ def check_dependencies():
     print("\n🔍 Checking dependencies...")
 
     required_packages = [
-        "langchain",
+        "langchain_core",
+        "langchain_community",
+        "langchain_text_splitters",
+        "langchain_chroma",
         "langchain_openai",
         "langgraph",
         "chromadb",

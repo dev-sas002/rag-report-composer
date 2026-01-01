@@ -49,7 +49,7 @@ def test_check_dependencies_handles_missing_package(capsys, monkeypatch):
     """check_dependencies should surface missing packages cleanly."""
 
     def fake_import(name):
-        if name == "langchain":
+        if name == "langchain_core":
             raise ImportError()
         return None
 

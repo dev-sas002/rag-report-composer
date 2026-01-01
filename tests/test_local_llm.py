@@ -8,7 +8,7 @@ project exists to demonstrate.
 """
 
 import pytest
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from src.agent.context import assemble_context
 from src.agent.local_llm import ExtractiveReportWriter

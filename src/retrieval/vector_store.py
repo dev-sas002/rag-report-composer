@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import List, Optional, Protocol, runtime_checkable
 
 import chromadb
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from ..config import get_settings
 from ..observability.logger import get_logger

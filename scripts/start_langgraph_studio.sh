@@ -14,7 +14,7 @@ echo "LangGraph Studio will open in your browser"
 echo "You'll be able to visualize and debug the agent workflow"
 echo ""
 echo -e "${YELLOW}Make sure you have langgraph-cli installed:${NC}"
-echo "  pip install langgraph-cli"
+echo "  pip install \"langgraph-cli[inmem]\""
 echo ""
 echo -e "${YELLOW}Press Ctrl+C to stop LangGraph Studio${NC}"
 echo ""
@@ -22,7 +22,7 @@ echo ""
 # Check if langgraph is installed
 if ! command -v langgraph &> /dev/null; then
     echo "Error: langgraph-cli not found. Installing..."
-    pip install langgraph-cli
+    pip install "langgraph-cli[inmem]"
 fi
 
 # Start LangGraph Studio

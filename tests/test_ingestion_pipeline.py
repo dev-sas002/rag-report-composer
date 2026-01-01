@@ -3,7 +3,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from src.data_ingestion.ingestion_pipeline import IngestionPipeline
 from src.utils.text_splitter import get_text_splitter

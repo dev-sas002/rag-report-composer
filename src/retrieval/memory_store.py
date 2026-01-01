@@ -15,7 +15,7 @@ import math
 from typing import Any, List, Optional, Sequence, Tuple
 from uuid import uuid4
 
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 
 def cosine_distance(a: Sequence[float], b: Sequence[float]) -> float:
