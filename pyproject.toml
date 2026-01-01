@@ -1,9 +1,10 @@
 [tool.poetry]
 name = "rag-company-report"
 version = "1.0.0"
-description = "Production-grade RAG pipeline for company data analysis and report generation"
+description = "Cited, auditable reports from a folder of company documents, offline by default"
 authors = ["The project authors"]
 readme = "README.md"
+license = "MIT"
 packages = [{include = "src"}]
 
 [tool.poetry.dependencies]
