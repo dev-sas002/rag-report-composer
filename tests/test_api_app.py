@@ -171,8 +171,9 @@ def test_an_uploaded_file_is_ingested_and_its_temp_copy_removed(monkeypatch):
     _store, fake_pipeline, _graph = _setup_app_with_fakes(monkeypatch)
     seen = {}
 
-    def record(path):
+    def record(path, source_name=None):
         seen["path"] = path
+        seen["source_name"] = source_name
         return 4
 
     fake_pipeline.ingest_file.side_effect = record
@@ -186,6 +187,8 @@ def test_an_uploaded_file_is_ingested_and_its_temp_copy_removed(monkeypatch):
     assert resp.status_code == 200
     assert resp.json()["chunks_added"] == 4
     assert not Path(seen["path"]).exists()
+    # Cited by the name it was uploaded under, not the temp copy's.
+    assert seen["source_name"] == "notes.md"
 
 
 def test_a_failed_ingestion_still_removes_the_temp_file(monkeypatch):
@@ -193,7 +196,7 @@ def test_a_failed_ingestion_still_removes_the_temp_file(monkeypatch):
     _store, fake_pipeline, _graph = _setup_app_with_fakes(monkeypatch)
     seen = {}
 
-    def explode(path):
+    def explode(path, source_name=None):
         seen["path"] = path
         raise RuntimeError("splitter blew up")
 
@@ -224,3 +227,36 @@ def test_stats_endpoint_reports_the_collection(monkeypatch):
     assert resp.status_code == 200
     assert resp.json()["total_documents"] == 42
     assert resp.json()["collection_name"] == "company_data"
+
+
+def test_an_unknown_report_format_is_rejected(monkeypatch):
+    """A typo in `format` used to fall through to plain text silently."""
+    _store, _pipeline, fake_graph = _setup_app_with_fakes(monkeypatch)
+
+    with TestClient(api_main.app) as client:
+        resp = client.post(
+            "/query", json={"query": "revenue?", "save_report": True, "format": "pdf"}
+        )
+
+    assert resp.status_code == 422
+    fake_graph.generate_report.assert_not_called()
+
+
+def test_request_handlers_are_sync_so_blocking_work_leaves_the_event_loop_free():
+    """
+    Report generation and ingestion block for seconds (embedding, Chroma, the
+    model call). As `async def` handlers they ran on the event loop and stalled
+    every other request, `/health` included, until they finished. Plain `def`
+    handlers run in FastAPI's threadpool.
+    """
+    import inspect
+
+    blocking = [
+        api_main.generate_report,
+        api_main.ingest_text,
+        api_main.ingest_file,
+        api_main.clear_collection,
+        api_main.health_check,
+        api_main.get_collection_stats,
+    ]
+    assert not [f.__name__ for f in blocking if inspect.iscoroutinefunction(f)]

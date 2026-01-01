@@ -79,6 +79,25 @@ def test_ingest_file_adds_metadata_and_calls_vector_store(pipeline, fake_vector_
     assert chunks[0].metadata["ingestion_type"] == "file"
 
 
+def test_an_uploaded_temp_file_is_cited_by_its_original_name(
+    pipeline, fake_vector_store, fake_document_loader
+):
+    """The API saves uploads to a temp file; citations must not name that file."""
+    fake_document_loader.load_file.return_value = [
+        Document(
+            page_content="upload content",
+            metadata={"source": "tmpk3x9q2.pdf", "source_path": "/tmp/tmpk3x9q2.pdf"},
+        )
+    ]
+
+    pipeline.ingest_file("/tmp/tmpk3x9q2.pdf", source_name="board_pack_q3.pdf")
+
+    (chunks,) = fake_vector_store.add_documents.call_args.args
+    assert chunks[0].metadata["source"] == "board_pack_q3.pdf"
+    assert chunks[0].metadata["source_file"] == "board_pack_q3.pdf"
+    assert "source_path" not in chunks[0].metadata
+
+
 def test_ingest_directory_handles_no_documents_gracefully(fake_vector_store, fake_text_splitter):
     """ingest_directory should return 0 when no documents are found."""
     empty_loader = Mock()

@@ -4,12 +4,16 @@ Provides REST API endpoints for data ingestion and report generation.
 """
 
 import os
+import shutil
+import tempfile
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from pathlib import Path
+from typing import List, Literal, Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
 from ..agent.graph import ReportGenerationGraph
@@ -18,22 +22,18 @@ from ..data_ingestion.ingestion_pipeline import IngestionPipeline
 from ..observability.cost_tracker import get_cost_tracker
 from ..observability.logger import get_logger, setup_logging
 from ..retrieval.vector_store import VectorStore
+from ..utils.document_loader import DocumentLoader
 
-# Setup logging
 setup_logging()
 logger = get_logger(__name__)
 
-# Global instances
 vector_store: Optional[VectorStore] = None
 ingestion_pipeline: Optional[IngestionPipeline] = None
 report_graph: Optional[ReportGenerationGraph] = None
 
 
 def create_vector_store() -> VectorStore:
-    """Factory for the VectorStore used by the API.
-
-    Extracted for easier testing and potential future customization.
-    """
+    """Factory for the VectorStore used by the API; tests replace it with a fake."""
     return VectorStore()
 
 
@@ -54,7 +54,6 @@ async def lifespan(app: FastAPI):
 
     logger.info("api_startup")
 
-    # Initialize components
     vector_store = create_vector_store()
     ingestion_pipeline = create_ingestion_pipeline(vector_store)
     report_graph = create_report_graph(vector_store)
@@ -63,13 +62,11 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Cleanup
     logger.info("api_shutdown")
     cost_tracker = get_cost_tracker()
     cost_tracker.log_session_summary()
 
 
-# Create FastAPI app
 settings = get_settings()
 app = FastAPI(
     title="RAG Company Report Generator API",
@@ -78,7 +75,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Configure appropriately for production
@@ -94,7 +90,9 @@ class QueryRequest(BaseModel):
 
     query: str = Field(..., description="Question or query about the company data", min_length=1)
     save_report: bool = Field(default=False, description="Whether to save the report to file")
-    format: str = Field(default="markdown", description="Output format (text or markdown)")
+    format: Literal["text", "markdown"] = Field(
+        default="markdown", description="Output format of the saved report"
+    )
 
 
 class CitationModel(BaseModel):
@@ -179,7 +177,7 @@ class CostSummaryResponse(BaseModel):
 
 
 @app.get("/", tags=["Root"])
-async def root():
+def root():
     """Root endpoint with API information."""
     return {
         "message": "RAG Company Report Generator API",
@@ -190,7 +188,7 @@ async def root():
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
-async def health_check():
+def health_check():
     """Health check endpoint."""
     try:
         stats = vector_store.get_collection_info()
@@ -209,7 +207,7 @@ async def health_check():
 
 
 @app.get("/stats", response_model=CollectionStatsResponse, tags=["Data Management"])
-async def get_collection_stats():
+def get_collection_stats():
     """Get vector store collection statistics."""
     try:
         stats = vector_store.get_collection_info()
@@ -234,18 +232,12 @@ class TextIngestionRequest(BaseModel):
 
 
 @app.post("/ingest/text", response_model=IngestionResponse, tags=["Data Management"])
-async def ingest_text(request: TextIngestionRequest):
+def ingest_text(request: TextIngestionRequest):
     """Ingest text content directly."""
     try:
-        from langchain.schema import Document
-
-        # Create document
         doc = Document(page_content=request.text, metadata={"source": request.source_name})
 
-        # Ingest
         chunks_added = ingestion_pipeline.ingest_documents([doc])
-
-        # Get stats
         stats = vector_store.get_collection_info()
 
         logger.info("text_ingested", chunks_added=chunks_added, source=request.source_name)
@@ -265,13 +257,9 @@ async def ingest_text(request: TextIngestionRequest):
 
 
 @app.post("/ingest/file", response_model=IngestionResponse, tags=["Data Management"])
-async def ingest_file(file: UploadFile = File(...)):
+def ingest_file(file: UploadFile = File(...)):
     """Ingest a document file (PDF, DOCX, TXT, MD)."""
     try:
-        import tempfile
-        from pathlib import Path
-
-        # Check file extension
         if not file.filename:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -279,7 +267,7 @@ async def ingest_file(file: UploadFile = File(...)):
             )
 
         file_ext = Path(file.filename).suffix.lower()
-        supported_extensions = [".pdf", ".txt", ".md", ".docx", ".doc"]
+        supported_extensions = sorted(DocumentLoader.SUPPORTED_EXTENSIONS)
 
         if file_ext not in supported_extensions:
             raise HTTPException(
@@ -287,17 +275,14 @@ async def ingest_file(file: UploadFile = File(...)):
                 detail=f"Unsupported file type: {file_ext}. Supported: {supported_extensions}",
             )
 
-        # Save to temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
-            content = await file.read()
-            tmp_file.write(content)
+            shutil.copyfileobj(file.file, tmp_file)
             tmp_file_path = tmp_file.name
 
         try:
-            # Ingest file
-            chunks_added = ingestion_pipeline.ingest_file(tmp_file_path)
-
-            # Get stats
+            # The loader only sees the temp copy, so without the upload's own
+            # name every citation from this file read "tmpk3x9q2.pdf".
+            chunks_added = ingestion_pipeline.ingest_file(tmp_file_path, source_name=file.filename)
             stats = vector_store.get_collection_info()
 
             logger.info(
@@ -349,10 +334,9 @@ def saved_report_metadata(result: dict) -> dict:
 
 
 @app.post("/query", response_model=ReportResponse, tags=["Report Generation"])
-async def generate_report(request: QueryRequest):
+def generate_report(request: QueryRequest):
     """Generate a report based on the query."""
     try:
-        # Check if vector store has data
         stats = vector_store.get_collection_info()
         if stats["count"] == 0:
             raise HTTPException(
@@ -362,17 +346,14 @@ async def generate_report(request: QueryRequest):
 
         logger.info("report_generation_requested", query=request.query)
 
-        # Generate report
         result = report_graph.generate_report(request.query)
 
-        # Check for errors
         if result.get("error"):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Report generation failed: {result['error']}",
             )
 
-        # Save report if requested
         saved_file = None
         if request.save_report:
             from ..report_writer import ReportWriter
@@ -429,7 +410,7 @@ async def generate_report(request: QueryRequest):
 
 
 @app.get("/costs", response_model=CostSummaryResponse, tags=["Monitoring"])
-async def get_cost_summary():
+def get_cost_summary():
     """Get session cost summary."""
     try:
         cost_tracker = get_cost_tracker()
@@ -450,7 +431,7 @@ async def get_cost_summary():
 
 
 @app.delete("/clear", tags=["Data Management"])
-async def clear_collection():
+def clear_collection():
     """Clear all documents from the vector store."""
     try:
         logger.warning("collection_clear_requested")

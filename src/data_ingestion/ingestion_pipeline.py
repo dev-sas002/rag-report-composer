@@ -3,9 +3,10 @@ Data ingestion pipeline for loading company documents into the vector store.
 Handles document loading, splitting, and storage.
 """
 
+from pathlib import Path
 from typing import List, Optional, Protocol
 
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from ..observability.logger import get_logger
 from ..retrieval.vector_store import VectorStore
@@ -48,12 +49,14 @@ class IngestionPipeline:
         self.text_splitter = text_splitter or get_text_splitter()
         self.document_loader = document_loader or DocumentLoader()
 
-    def ingest_file(self, file_path: str) -> int:
+    def ingest_file(self, file_path: str, source_name: Optional[str] = None) -> int:
         """
         Ingest a single file into the vector store.
 
         Args:
             file_path: Path to the file
+            source_name: Name to cite the file by, when `file_path` is a temporary
+                copy (an API upload) rather than the document's real location
 
         Returns:
             Number of chunks added
@@ -61,15 +64,17 @@ class IngestionPipeline:
         logger.info("ingestion_started", file_path=file_path, type="file")
 
         try:
-            # Load documents
             documents = self.document_loader.load_file(file_path)
+            if source_name:
+                label = Path(source_name).name
+                for document in documents:
+                    document.metadata["source"] = label
+                    document.metadata.pop("source_path", None)
 
-            # Split into chunks
             chunks = self.text_splitter.split_documents(documents)
 
-            # Add metadata
             for chunk in chunks:
-                chunk.metadata["source_file"] = file_path
+                chunk.metadata["source_file"] = source_name or file_path
                 chunk.metadata["ingestion_type"] = "file"
 
             # Store in vector store
