@@ -1,18 +1,12 @@
 """
-Document loader for various file formats.
-Supports PDF, DOCX, TXT, and other common document formats.
+Document loader for the file formats the pipeline can index: PDF, DOCX, TXT, MD.
 """
 
 from pathlib import Path
 from typing import List
 
-from langchain.schema import Document
-from langchain_community.document_loaders import (
-    DirectoryLoader,
-    PyPDFLoader,
-    TextLoader,
-    UnstructuredWordDocumentLoader,
-)
+from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader, TextLoader
+from langchain_core.documents import Document
 
 from ..observability.logger import get_logger
 
@@ -42,6 +36,33 @@ def label_sources(documents: List[Document]) -> List[Document]:
     return documents
 
 
+class DocxLoader:
+    """
+    Reads a .docx file with python-docx: paragraphs in order, then table rows.
+
+    This replaces LangChain's `UnstructuredWordDocumentLoader`, which needs the
+    `unstructured` package. That package was never in requirements.txt, so
+    every Word upload failed with an ImportError while python-docx sat
+    installed and unused. Legacy binary `.doc` is not supported by either
+    library without LibreOffice, so it is no longer advertised.
+    """
+
+    def __init__(self, file_path: str) -> None:
+        self.file_path = file_path
+
+    def load(self) -> List[Document]:
+        import docx
+
+        word_document = docx.Document(self.file_path)
+        blocks = [p.text for p in word_document.paragraphs if p.text.strip()]
+        for table in word_document.tables:
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                if cells:
+                    blocks.append(" | ".join(cells))
+        return [Document(page_content="\n\n".join(blocks), metadata={"source": self.file_path})]
+
+
 class DocumentLoader:
     """Loads documents from various file formats."""
 
@@ -49,8 +70,7 @@ class DocumentLoader:
         ".pdf": PyPDFLoader,
         ".txt": TextLoader,
         ".md": TextLoader,
-        ".docx": UnstructuredWordDocumentLoader,
-        ".doc": UnstructuredWordDocumentLoader,
+        ".docx": DocxLoader,
     }
 
     @classmethod

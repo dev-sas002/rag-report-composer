@@ -36,6 +36,31 @@ class TestSingleFile:
         assert documents[0].metadata["source"] == "annual_report.md"
         assert documents[0].metadata["source_path"] == str(corpus / "annual_report.md")
 
+    def test_a_word_document_is_loaded_with_its_paragraphs_and_tables(self, tmp_path):
+        import docx
+
+        word = docx.Document()
+        word.add_heading("Board pack", level=1)
+        word.add_paragraph("Gross margin widened to 71 percent.")
+        table = word.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Segment"
+        table.cell(0, 1).text = "Revenue"
+        table.cell(1, 0).text = "Enterprise"
+        table.cell(1, 1).text = "4.1m"
+        path = tmp_path / "board_pack.docx"
+        word.save(str(path))
+
+        documents = DocumentLoader.load_file(str(path))
+
+        assert len(documents) == 1
+        text = documents[0].page_content
+        assert "Gross margin widened to 71 percent." in text
+        assert "Enterprise | 4.1m" in text
+        assert documents[0].metadata["source"] == "board_pack.docx"
+
+    def test_legacy_binary_doc_is_not_advertised(self):
+        assert ".doc" not in DocumentLoader.SUPPORTED_EXTENSIONS
+
     def test_a_plain_text_file_is_loaded(self, corpus):
         documents = DocumentLoader.load_file(str(corpus / "notes.txt"))
 
