@@ -1,200 +1,159 @@
 # RAG Report Generator
 
-Ask a question about a folder of company documents and get a written report back,
-where every line carries the marker of the chunk it came from and a check says
-whether those markers were real. LangGraph runs the pipeline, ChromaDB holds the
-vectors, a CLI and a FastAPI service expose it. It needs **no API key** — local
-embeddings, an extractive writer — so all of it is reproducible from a clone.
-
-## A report, and the receipts
-
-Trimmed from a real session; the full transcript is in
-**[`docs/captured-output.md`](docs/captured-output.md)**.
+Point it at a folder of documents, ask a question, and get a written report where every line
+carries a marker for the chunk it came from, plus an audit that says whether those markers are real.
+LangGraph runs the pipeline over ChromaDB; a CLI and a FastAPI service expose it. No API key is
+needed: embeddings run locally and an extractive writer produces the report, so a fresh clone works.
 
 ```console
-$ LOG_LEVEL=WARNING python main.py --query "What do customers complain about most?"
+$ python main.py --query "What do customers complain about most?"
 - ## What customers complained about Reporting flexibility remains the largest source of dissatisfaction, named in 44 percent of negative responses. [S1]
 - Export limits were the second complaint, at 27 percent. [S1]
+- Pricing transparency appeared in 19 percent of negative responses, almost entirely from mid-market accounts moving between tiers. [S1]
+...
+SOURCES
 [S1] customer_satisfaction_q4.md  (distance 0.896)
 [S2] customer_satisfaction_q4.md  (distance 1.207)
+PROVENANCE
 Groundedness: 1.00  (1.00 = every claim word is in a source)
 Cited: S1, S2
 ```
 
-Retrieval returned five chunks and the report cites two: the other three sat more
-than 35% farther from the query than the best hit (`CONTEXT_RELEVANCE_MARGIN`). The
-audit exists for the failure that looks like success — a marker pointing at a source
-never supplied. Section 3 swaps in a writer citing `[S7]` when only `S1` and `S2` were
-supplied: the audit returns `INVENTED: ['S7']`, groundedness 0.3, the graph logs
-`invented_citations` at ERROR and `scripts/run_evaluation.py` fails the run. The same
-provenance is data on `/query`, captured with the generated
-[Swagger](docs/screenshots/api-docs.png) and [schema](docs/screenshots/api-query-response.png).
+Trimmed from a run on the bundled sample documents with no key set. The full transcript, including
+the API response and the benchmark, is in [`docs/captured-output.md`](docs/captured-output.md).
 
-## Run it
-
-```bash
-docker compose up --build            # then http://localhost:8350/docs
-```
-
-The container indexes `data/raw_data/` at startup, so there is something to ask. Or:
+## Running locally
 
 ```bash
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env                      # optional; every value has a default
-python scripts/verify_setup.py            # config, deps, directories
-python scripts/ingest_sample_data.py      # index data/raw_data/
+python scripts/ingest_sample_data.py      # index data/raw_data/ (6 chunks)
 python main.py --query "How much did revenue grow and which segment drove it?"
+make serve                                # API on http://localhost:8350/docs
 ```
 
-`make serve` (or `./scripts/start_api.sh`) binds the API on **8350**; `make help`
-lists the rest. Set `OPENAI_API_KEY` and the backends become
-`text-embedding-3-large` and `gpt-4-turbo-preview` with cost tracked per call;
-without it, `all-MiniLM-L6-v2` (384 dims against 3072) and the extractive writer.
-Vector widths differ, so switching needs `python main.py --clear` and a re-ingest —
-the mismatch is logged as `embedding_dimension_mismatch` at startup. `.env.example`
-documents every setting; `tests/test_settings.py` fails if it and `Settings` drift.
+`docker compose up --build` does the same in a container and indexes the samples at startup.
+`cp .env.example .env` is optional; every setting has a default and `tests/test_settings.py` fails
+if `.env.example` and `Settings` drift apart. Other CLI flags: `--ingest-dir`, `--ingest-file`,
+`--stats`, `--clear`, `--output`.
 
-## What happens when you ask a question
+| Setting | Default | Effect |
+|---|---|---|
+| `OPENAI_API_KEY` | unset | When set, uses `text-embedding-3-large` and `gpt-4-turbo-preview`, with per-call cost tracking |
+| `TOP_K_RESULTS` | 5 | Chunks retrieved per query |
+| `CONTEXT_RELEVANCE_MARGIN` | 0.35 | Drop chunks more than 35% farther from the query than the best hit |
+| `MAX_CONTEXT_CHARS` | 12000 | Hard cap on assembled context |
+| `CHUNK_SIZE` / `CHUNK_OVERLAP` | 1000 / 200 | Splitter settings |
+| `LLM_PROVIDER`, `EMBEDDING_PROVIDER`, `VECTOR_BACKEND` | auto, auto, chroma | Pick a registered backend by name |
+
+Switching between local (384-dim `all-MiniLM-L6-v2`) and OpenAI (3072-dim) embeddings needs
+`python main.py --clear` and a re-ingest. The store logs `embedding_dimension_mismatch` if you forget.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Q["query"] --> R["retrieve_documents<br/>top-k from Chroma"]
+    R --> B["build_context<br/>prune, trim overlap, cap"]
+    B --> G["generate_report<br/>cite as [S1]..[Sn]"]
+    G --> A{"citation audit"}
+    A --> S["generate_summary"]
+    S --> O["report + citations<br/>+ audit + cost"]
+    A -. "unknown marker" .-> E["log invented_citations<br/>at ERROR"]
+```
+
+The graph in `src/agent/graph.py` has four nodes. The audit runs inside `generate_report`: it sorts
+markers into valid, invalid and unused, and scores groundedness as the share of the report's content
+words that appear in the supplied source text (the query's words excluded). `/query` returns all of it:
 
 ```mermaid
 sequenceDiagram
-    actor U as User
-    participant G as API · LangGraph
-    participant V as Vector store
-    participant C as Context assembly
-    participant W as Writer
-    participant A as Citation audit
-    U->>G: POST /query { query }
-    G->>V: similarity search, top k → chunks + distances
-    G->>C: assemble prompt context
-    Note over C: prune by relevance · trim splitter overlap · cap at MAX_CONTEXT_CHARS
-    C-->>G: context + [S1..Sn] citations, source metadata
-    G->>W: question + context + "cite [S1]"
-    W-->>G: report, then summary
-    G->>A: check markers → valid · invalid · unused · groundedness
-    G-->>U: JSON a reader can check a claim against
+    participant C as Client
+    participant API as FastAPI
+    participant G as LangGraph
+    C->>API: POST /query {"query": "..."}
+    API->>G: generate_report(query)
+    G-->>API: report, summary, citations, citation_audit
+    API-->>C: JSON with groundedness, tokens, total_cost_usd
 ```
 
-Four nodes, each returning **only the keys it changed** — load-bearing, because
-`retrieved_documents` carries an accumulating reducer, so a node echoing the whole
-state back re-appends the documents it was handed, and four nodes doing that turn
-`k` retrieved chunks into `8k` entries; four tests in `tests/test_agent_nodes.py`
-pin the key set each node may return. `context.py`, `citations.py` and
-`evaluation/grounding.py` are pure functions over the standard library alone, so most
-of the suite runs with no store and no model.
+Other endpoints: `GET /health`, `GET /stats`, `POST /ingest/text`, `POST /ingest/file`,
+`GET /costs`, `DELETE /clear`.
 
-## Where the money goes
+## Design decisions
 
-The bottleneck is the prompt, not CPU: every character assembled into context is billed
-as an input token on *every* query. Assembly prunes chunks far from the best hit, trims
-the overlap the splitter adds between adjacent chunks (5.6% duplication at
-`CHUNK_OVERLAP=200`, measured), then caps at `MAX_CONTEXT_CHARS`. At shipped defaults
-over the six evaluation questions with the real local embedder, the mean report prompt
-goes **921 → 588 tokens (−36.1%)** and cost per report **$0.0982 → $0.0949 (−3.4%)**.
+**Audit the citations instead of trusting them.** A model told to cite `[S1]` will sometimes cite
+`[S7]` when only two sources were supplied, and the output still looks sourced. Section 3 of the
+captured output swaps in a writer that does exactly that: the audit returns `invalid: ['S7']`,
+groundedness 0.3, and names the invented words (`antarctic`, `titanium`, `tripled`). The check is
+lexical, so it catches fabricated markers and vocabulary but cannot tell whether a cited passage
+supports the claim. I accepted that in exchange for a check that is deterministic and free.
 
-**3.4% is the honest headline and it is small for a reason**: a report's 2,000 *output*
-tokens bill at 3× the input rate and none of this touches them. Pruning fires hard — two
-or three of every five chunks dropped — but output dominates one report at `k=5`. The
-input side is what *grows*, so that is where it shows (a synthetic 1,200-chunk corpus,
-since the shipped one is six chunks):
+**Nodes return only the keys they changed.** `retrieved_documents` uses an accumulating reducer. A
+node that echoes the whole state back re-appends the documents it received, and across four nodes
+`k` chunks become `8k`. Four tests in `tests/test_agent_nodes.py` pin the key set each node may return.
 
-| `k` | naive prompt | bounded prompt | $ naive | $ bounded | saving |
-|---:|---:|---:|---:|---:|---:|
-| 5 | 1,003 | 1,003 | 0.0990 | 0.0990 | 0.0% |
-| 10 | 1,856 | 1,856 | 0.1076 | 0.1076 | 0.0% |
-| 20 | 3,529 | 2,841 | 0.1243 | 0.1174 | 5.5% |
-| 40 | 6,901 | 2,861 | 0.1580 | 0.1176 | 25.6% |
-| 80 | 13,594 | 2,861 | 0.2249 | **0.1176** | **47.7%** |
+**Bound the prompt, not the retriever.** Every character of context is billed as input on every
+query. Context assembly drops chunks far from the best hit, removes the overlap the splitter adds
+between neighbours (5.6% duplicated text at the default settings), then stops at `MAX_CONTEXT_CHARS`.
+With the real local embedder over six evaluation questions, the mean prompt falls from 921 to 588
+tokens (36.1%), but cost per report only from $0.0982 to $0.0949 (3.4%), because 2,000 output tokens
+at three times the input rate dominate a single report. The bound matters as `k` grows. On a
+synthetic 1,200-chunk corpus (`python scripts/benchmark.py`):
 
-Naive grows linearly with `k` forever; bounded plateaus. Pruning shows zero there
-because the hashing embedder used for that run is semantically blind, which the
-benchmark says — `MAX_CONTEXT_CHARS` does the work. A content-addressed SQLite cache
-fronts any embedder too (warm ingestion issues **zero** embedding calls), keyed on the
-model name *and* the text, since one backend's vectors served to another return the
-wrong chunks silently.
+| `k` | naive prompt (tokens) | bounded prompt (tokens) | $ naive | $ bounded |
+|---:|---:|---:|---:|---:|
+| 5 | 1,003 | 1,003 | 0.0990 | 0.0990 |
+| 20 | 3,529 | 2,841 | 0.1243 | 0.1174 |
+| 80 | 13,594 | 2,861 | 0.2249 | 0.1176 |
 
-## Scoring retrieval without an LLM judge
+Pruning only fires when distances say something, and it is skipped for backends that report
+similarity rather than distance, since inverted polarity would drop the best hits.
 
-`scripts/run_evaluation.py` scores six questions a human can check by hand:
+**A cache keyed on model and text.** A SQLite cache sits in front of any embedder, keyed on a SHA-256
+of the model name plus the exact text. A warm re-ingest makes zero embedding calls. Keying on text
+alone would let one model's vectors be served to another, which returns wrong chunks without an error.
+
+**One seam for every backend.** The chat model, embedder and vector store are resolved by name through
+`src/providers/registry.py`, so adding Ollama is a `register_llm("ollama", factory)` call. Factories
+import their dependencies lazily (a test checks that registering the built-ins does not pull in
+`torch`), and an unknown name raises with the list of alternatives rather than falling back to a
+backend that bills someone. `hashing` embeddings and an in-memory store let the benchmark run with no
+model weights.
+
+## Testing
+
+```bash
+python -m pytest -q              # 282 passed
+python scripts/run_evaluation.py # retrieval and grounding on six fixed questions
+ruff check src tests scripts && black --check src tests scripts
+```
 
 ```
-backend=local pass=6/6 recall=1.00 precision=0.40 faithfulness=0.98 p95=6399ms
+backend=local pass=6/6 recall=1.00 precision=0.40 faithfulness=0.98
   citation groundedness: mean 1.00
-  ✓ revenue-growth     recall=1.00 precision=0.40 faith=0.94 6399ms
-  ✓ complaints         recall=1.00 precision=0.40 faith=0.99    6ms
 ```
 
-Precision of 0.40 is arithmetic, not a failure: six chunks in the corpus and
-`TOP_K_RESULTS=5` means at most two of the five returned can come from the one
-expected document. The p95 is entirely the first query paying to load the embedding
-model — the rest are 6–33 ms — and is reported as measured, because a cold start is a
-real user's first impression. Every metric is deterministic: **no model judges another
-model's output**. Groundedness is lexical overlap with the text the report was given,
-the query excluded. The run exits non-zero below 0.80 mean recall, below 0.50 mean
-faithfulness, or on any invented citation.
+The evaluation uses no LLM judge. Every metric is deterministic, and the script exits non-zero below
+0.80 mean recall, below 0.50 mean faithfulness, or on any invented citation. Precision of 0.40 is a
+ceiling set by the corpus: with six chunks and `k=5`, at most two of the five can come from the one
+expected document. The first query also pays to load the embedding model, so p95 latency reflects
+a cold start.
 
-## Swapping a backend
+No test touches the network. `tests/conftest.py` blocks non-loopback sockets, and the seven tests in
+`tests/test_network_guard.py` try `socket.connect`, `connect_ex`, `create_connection`, an HTTPS
+`httpx.get` and an off-box hostname, asserting each is refused while the FastAPI `TestClient` still
+works. The guard covers in-process TCP (TLS included), not UDP, raw sockets or subprocesses.
 
-The chat model, the embedder and the vector store go through one seam,
-`src/providers/registry.py`, named by `LLM_PROVIDER` / `EMBEDDING_PROVIDER` /
-`VECTOR_BACKEND`:
+## Limitations and roadmap
 
-```python
-from src.providers import register_llm
-
-def make_ollama(settings):
-    from langchain_community.chat_models import ChatOllama   # imported lazily
-    return ChatOllama(model="llama3")
-
-register_llm("ollama", make_ollama)
-```
-
-Factories import inside the body, so registering providers does not make an OpenAI-only
-process pay for importing `sentence_transformers` and torch — a test asserts registering
-them leaves `torch` no more present in `sys.modules` than it already was. An unregistered
-name raises immediately and names the alternatives rather than defaulting to something
-that quietly bills someone. Two sockets hold a non-obvious occupant, `hashing` embeddings
-and the `memory` store, so benchmarking needs no model weights.
-
-## What is verified, and how far
-
-`python -m pytest -q` runs **282 passing** tests; `ruff check` and `black --check`
-over `src/ tests/ scripts/` are clean, config in `pyproject.toml`. **None of those
-tests can reach the network.** Every OpenAI chat, embedding and HTTP call is faked
-and `tests/conftest.py` blocks non-loopback sockets — not on trust: the 7 tests in
-`tests/test_network_guard.py` *attempt* outbound connections and assert each is refused:
-a raw `socket.connect`, a `connect_ex` (which returns a code instead of raising, so it
-would slip past a connect-only guard), `socket.create_connection`, a real `httpx.get`
-over HTTPS, a hostname resolving off-box — while loopback and the FastAPI `TestClient`
-still work. Stated limits: it patches `socket.socket.connect`/`connect_ex`, covering
-every in-process TCP client including TLS, but **not** UDP, raw sockets, or a
-subprocess.
-
-**Dependency pins are partially verified.** All 32 pins in `requirements.txt` match the
-installed versions in the environment that runs the suite, the harness and the benchmark,
-and `pip check` finds no broken requirements. Not verified: a cold
-`pip install -r requirements.txt` from PyPI into an empty environment, and resolution on
-Python 3.11 — the Dockerfile uses `python:3.11-slim`, but all of this ran on 3.12.6.
-
-**The image has not been built or booted here.** This repo's uplift report records
-`Build verified: NOT RUN — deferred, RAM constraint` and the same for boot; what was
-checked is `docker compose config -q`, which parses cleanly. That build is exactly the
-cold install on 3.11 above, so running it would close both gaps.
-
-## Known gaps
-
-- **Offline reports are extractive** — they quote and cite rather than synthesise.
-  Groundedness is lexical, so overlap cannot tell a paraphrase from an invention, and
-  the audit checks form, not truth: that a marker was supplied and the vocabulary came
-  from the cited text, not that it supports the claim.
-- **No re-ranking** — plain top-`k` cosine plus a distance threshold. Pruning is a
-  heuristic with one global knob, and it declines to act at all against a backend
-  reporting similarity rather than distance, since the wrong polarity would drop the
-  best hits.
-- **One collection, no tenancy**, `allow_origins=["*"]`, synchronous ingestion.
-- **The sample corpus is tiny** — three Markdown documents, six chunks: enough to check
-  by hand, too small for the scalability work to show. Those files are deliberately
-  tracked (`data/*` is gitignored with a narrowed exception for `data/raw_data/*.md`) so
-  a clean clone has something to retrieve.
-- `langchain_community.vectorstores.Chroma` is deprecated; not yet migrated.
+- **Offline reports are extractive.** They quote and cite; synthesis needs an OpenAI key or another
+  registered chat model.
+- **Grounding is lexical.** A natural next step is an entailment check per cited line.
+- **No re-ranking.** Retrieval is top-`k` cosine plus one global relevance margin; a cross-encoder
+  re-ranker would slot in after `retrieve_documents`.
+- **Single tenant.** One collection, `allow_origins=["*"]`, synchronous ingestion.
+- **Small sample corpus.** Three Markdown files, six chunks: easy to check by hand, too small for the
+  context bound to show, which is why the benchmark builds a synthetic corpus.
+- **Toolchain.** The suite runs on Python 3.12 while the Docker image uses `python:3.11-slim`;
+  `langchain_community`'s `Chroma` class is deprecated and should move to `langchain-chroma`.
